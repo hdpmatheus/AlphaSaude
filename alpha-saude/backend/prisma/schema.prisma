@@ -1,0 +1,121 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  recepcionista
+}
+
+enum StatusConsulta {
+  confirmada
+  pendente
+  cancelada
+  reagendada
+  realizada
+}
+
+enum StatusPagamento {
+  pago
+  pendente
+  convenio
+}
+
+model Funcionario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  telefone  String?
+  cargo     Role     @default(recepcionista)
+  senha     String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  historico Historico[]
+}
+
+model Paciente {
+  id        String   @id @default(uuid())
+  nome      String
+  cpf       String   @unique
+  telefone  String?
+  email     String   @unique
+  senha     String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  consultas  Consulta[]
+  historico  Historico[]
+}
+
+model Profissional {
+  id           String   @id @default(uuid())
+  nome         String
+  especialidade String
+  registro     String   @unique
+  telefone     String?
+  email        String?  @unique
+  diasAtendimento String[] // ["segunda", "terca", ...]
+  horarioInicio String   // "08:00"
+  horarioFim   String   // "18:00"
+  ativo        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  consultas    Consulta[]
+  bloqueios    Bloqueio[]
+}
+
+model Consulta {
+  id              String          @id @default(uuid())
+  pacienteId      String
+  profissionalId  String
+  data            DateTime
+  horario         String          // "09:00"
+  status          StatusConsulta  @default(pendente)
+  statusPagamento StatusPagamento @default(pendente)
+  formaPagamento  String?
+  valor           Decimal?        @db.Decimal(10, 2)
+  observacoes     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  paciente     Paciente     @relation(fields: [pacienteId], references: [id])
+  profissional Profissional @relation(fields: [profissionalId], references: [id])
+  historico    Historico[]
+}
+
+model Bloqueio {
+  id             String       @id @default(uuid())
+  profissionalId String
+  dataInicio     DateTime
+  dataFim        DateTime
+  motivo         String?
+  createdAt      DateTime     @default(now())
+
+  profissional Profissional @relation(fields: [profissionalId], references: [id])
+}
+
+model Historico {
+  id             String   @id @default(uuid())
+  tipo           String   // "cancelamento" | "reagendamento"
+  consultaId     String?
+  pacienteId     String?
+  funcionarioId  String?
+  dataOriginal   DateTime?
+  novaData       DateTime?
+  motivo         String?
+  createdAt      DateTime @default(now())
+
+  consulta   Consulta?   @relation(fields: [consultaId], references: [id])
+  paciente   Paciente?   @relation(fields: [pacienteId], references: [id])
+  funcionario Funcionario? @relation(fields: [funcionarioId], references: [id])
+}
