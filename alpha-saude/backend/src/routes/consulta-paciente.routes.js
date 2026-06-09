@@ -4,6 +4,7 @@ const { authenticate } = require('../middlewares/auth.middleware');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// Listar consultas do paciente logado
 router.get('/', authenticate, async (req, res) => {
   if (req.user.tipo !== 'paciente') return res.status(403).json({ error: 'Acesso negado' });
   try {
@@ -18,20 +19,24 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
+// Agendar consulta (paciente logado)
 router.post('/', authenticate, async (req, res) => {
   if (req.user.tipo !== 'paciente') return res.status(403).json({ error: 'Acesso negado' });
-  const { profissionalId, data, horario, observacoes } = req.body;
-  if (!profissionalId || !data || !horario) return res.status(400).json({ error: 'Campos obrigatórios' });
+
+  const { profissionalId, data, horario, observacoes, formaPagamento } = req.body;
+  if (!profissionalId || !data || !horario) {
+    return res.status(400).json({ error: 'Campos obrigatórios' });
+  }
 
   try {
-    const dataObj = new Date(data);
-    dataObj.setHours(0, 0, 0, 0);
-    const dataFim = new Date(dataObj);
-    dataFim.setHours(23, 59, 59, 999);
+    const [ano, mes, dia] = data.split('-').map(Number);
+    const dataObj = new Date(ano, mes - 1, dia, 0, 0, 0);
+    const dataFim = new Date(ano, mes - 1, dia, 23, 59, 59);
 
     const conflito = await prisma.consulta.findFirst({
       where: {
-        profissionalId, horario,
+        profissionalId,
+        horario,
         data: { gte: dataObj, lte: dataFim },
         status: { in: ['confirmada', 'pendente'] },
       },
@@ -39,7 +44,14 @@ router.post('/', authenticate, async (req, res) => {
     if (conflito) return res.status(409).json({ error: 'Horário já ocupado para este profissional' });
 
     const consulta = await prisma.consulta.create({
-      data: { pacienteId: req.user.id, profissionalId, data: new Date(data), horario, observacoes },
+      data: {
+        pacienteId: req.user.id,
+        profissionalId,
+        data: new Date(ano, mes - 1, dia, 12, 0, 0),
+        horario,
+        observacoes: observacoes || null,
+        formaPagamento: formaPagamento || null,
+      },
       include: { profissional: { select: { nome: true, especialidade: true } } },
     });
     res.status(201).json(consulta);
@@ -49,6 +61,7 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
+// Cancelar consulta (paciente logado)
 router.put('/:id/cancelar', authenticate, async (req, res) => {
   if (req.user.tipo !== 'paciente') return res.status(403).json({ error: 'Acesso negado' });
   const { motivo } = req.body;
@@ -57,9 +70,18 @@ router.put('/:id/cancelar', authenticate, async (req, res) => {
     if (!consulta) return res.status(404).json({ error: 'Consulta não encontrada' });
     if (consulta.pacienteId !== req.user.id) return res.status(403).json({ error: 'Acesso negado' });
 
-    await prisma.consulta.update({ where: { id: req.params.id }, data: { status: 'cancelada' } });
+    await prisma.consulta.update({
+      where: { id: req.params.id },
+      data: { status: 'cancelada' },
+    });
     await prisma.historico.create({
-      data: { tipo: 'cancelamento', consultaId: consulta.id, pacienteId: req.user.id, dataOriginal: consulta.data, motivo },
+      data: {
+        tipo: 'cancelamento',
+        consultaId: consulta.id,
+        pacienteId: req.user.id,
+        dataOriginal: consulta.data,
+        motivo: motivo || null,
+      },
     });
     res.json({ message: 'Consulta cancelada' });
   } catch {
