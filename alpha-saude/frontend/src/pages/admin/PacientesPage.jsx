@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Pencil, User } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, User } from 'lucide-react';
 import api from '../../services/api';
 
 const emptyForm = { nome: '', cpf: '', telefone: '', email: '', senha: '' };
@@ -47,6 +47,16 @@ export default function PacientesPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleDelete = async (id, nome) => {
+    if (!confirm(`Confirmar exclusão do paciente "${nome}"?`)) return;
+    try {
+      await api.delete(`/api/pacientes/${id}`);
+      carregar(search);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Erro ao excluir paciente');
+    }
+  };
+
   const handleSearch = (e) => {
     setSearch(e.target.value);
     carregar(e.target.value);
@@ -77,70 +87,42 @@ export default function PacientesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Nome completo</label>
-                <input
-                  value={form.nome}
-                  onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
-                  required
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                <input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} required
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">CPF</label>
-                <input
-                  value={form.cpf}
-                  onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))}
-                  placeholder="000.000.000-00"
-                  disabled={!!editId}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-400"
-                />
+                <input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))}
+                  placeholder="000.000.000-00" disabled={!!editId}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-400" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Telefone</label>
-                <input
-                  value={form.telefone}
-                  onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))}
+                <input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))}
                   placeholder="(00) 00000-0000"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">E-mail</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                  required
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
             </div>
             {!editId && (
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Senha provisória</label>
-                <input
-                  type="password"
-                  value={form.senha}
-                  onChange={e => setForm(p => ({ ...p, senha: e.target.value }))}
-                  placeholder="Mínimo 6 caracteres"
-                  required
-                  minLength={6}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                <input type="password" value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))}
+                  placeholder="Mínimo 6 caracteres" required={!editId} minLength={6}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
             )}
             <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 transition disabled:opacity-60"
-              >
+              <button type="submit" disabled={loading}
+                className="flex-1 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 transition disabled:opacity-60">
                 {loading ? 'Salvando...' : 'Salvar Paciente'}
               </button>
-              <button
-                type="button"
-                onClick={() => { setShowForm(false); setEditId(null); }}
-                className="px-5 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition"
-              >
+              <button type="button" onClick={() => { setShowForm(false); setEditId(null); }}
+                className="px-5 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm hover:bg-gray-50 transition">
                 Cancelar
               </button>
             </div>
@@ -176,11 +158,13 @@ export default function PacientesPage() {
               <p className="text-xs text-gray-400">{p.email}</p>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button
-                onClick={() => handleEdit(p)}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition"
-              >
+              <button onClick={() => handleEdit(p)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition">
                 <Pencil size={13} /> Editar
+              </button>
+              <button onClick={() => handleDelete(p.id, p.nome)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-500 rounded-lg text-xs hover:bg-red-50 transition">
+                <Trash2 size={13} /> Excluir
               </button>
             </div>
           </div>
