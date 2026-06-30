@@ -35,7 +35,7 @@ const criar = async (req, res) => {
 };
 
 const atualizar = async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
   const { nome, email, telefone, cargo, senha } = req.body;
 
   try {
@@ -54,9 +54,9 @@ const atualizar = async (req, res) => {
 };
 
 const excluir = async (req, res) => {
-  const { id } = req.params;
-  // Não deletar a si mesmo
-  if (req.user.id === id) return res.status(400).json({ error: 'Não é possível excluir seu próprio usuário' });
+  const id = Number(req.params.id);
+  // Não deletar a si mesmo (comparação numérica agora, antes era string)
+  if (Number(req.user.id) === id) return res.status(400).json({ error: 'Não é possível excluir seu próprio usuário' });
 
   try {
     await prisma.funcionario.update({ where: { id }, data: { ativo: false } });

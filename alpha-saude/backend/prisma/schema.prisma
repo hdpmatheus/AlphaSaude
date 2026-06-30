@@ -1,10 +1,9 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -27,95 +26,139 @@ enum StatusPagamento {
   convenio
 }
 
+enum DiaSemana {
+  segunda
+  terca
+  quarta
+  quinta
+  sexta
+  sabado
+  domingo
+}
+
+enum historico_tipo {
+  cancelamento
+  reagendamento
+}
+
 model Funcionario {
-  id        String   @id @default(uuid())
-  nome      String
-  email     String   @unique
-  telefone  String?
-  cargo     Role     @default(recepcionista)
-  senha     String
-  ativo     Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        Int       @id @default(autoincrement()) @map("id_funcionario")
+  nome      String    @db.VarChar(100)
+  email     String    @unique(map: "email") @db.VarChar(100)
+  telefone  String?   @db.VarChar(20)
+  cargo     Role      @default(recepcionista)
+  senha     String    @db.VarChar(255)
+  ativo     Boolean   @default(true)
+  createdAt DateTime? @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
 
   historico Historico[]
+
+  @@map("funcionario")
 }
 
 model Paciente {
-  id        String   @id @default(uuid())
-  nome      String
-  cpf       String   @unique
-  telefone  String?
-  email     String   @unique
-  senha     String
-  ativo     Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        Int       @id @default(autoincrement()) @map("id_paciente")
+  nome      String    @db.VarChar(100)
+  cpf       String    @unique(map: "cpf") @db.VarChar(14)
+  telefone  String?   @db.VarChar(20)
+  email     String    @unique(map: "email") @db.VarChar(100)
+  senha     String    @db.VarChar(255)
+  ativo     Boolean   @default(true)
+  createdAt DateTime? @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
 
-  consultas  Consulta[]
-  historico  Historico[]
+  consultas Consulta[]
+  historico Historico[]
+
+  @@map("paciente")
 }
 
 model Profissional {
-  id           String   @id @default(uuid())
-  nome         String
-  especialidade String
-  registro     String   @unique
-  telefone     String?
-  email        String?  @unique
-  diasAtendimento String[] // ["segunda", "terca", ...]
-  horarioInicio String   // "08:00"
-  horarioFim   String   // "18:00"
-  ativo        Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              Int       @id @default(autoincrement()) @map("id_profissional")
+  nome            String    @db.VarChar(100)
+  especialidade   String    @db.VarChar(80)
+  registro        String    @unique(map: "registro") @db.VarChar(20)
+  telefone        String?   @db.VarChar(20)
+  email           String?   @unique(map: "email") @db.VarChar(100)
+  horarioInicio   DateTime  @map("horario_inicio") @db.Time(0)
+  horarioFim      DateTime  @map("horario_fim") @db.Time(0)
+  ativo           Boolean   @default(true)
+  createdAt       DateTime? @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
 
-  consultas    Consulta[]
-  bloqueios    Bloqueio[]
+  bloqueios       Bloqueio[]
+  consultas       Consulta[]
+  diasAtendimento DiaAtendimento[]
+
+  @@map("profissional")
+}
+
+model DiaAtendimento {
+  id             Int          @id @default(autoincrement()) @map("id_dia")
+  profissionalId Int          @map("id_profissional")
+  diaSemana      DiaSemana    @map("dia_semana")
+
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "dia_atendimento_ibfk_1")
+
+  @@unique([profissionalId, diaSemana], name: "uq_profissional_dia", map: "uq_profissional_dia")
+  @@map("dia_atendimento")
 }
 
 model Consulta {
-  id              String          @id @default(uuid())
-  pacienteId      String
-  profissionalId  String
-  data            DateTime
-  horario         String          // "09:00"
+  id              Int             @id @default(autoincrement()) @map("id_consulta")
+  pacienteId      Int             @map("id_paciente")
+  profissionalId  Int             @map("id_profissional")
+  data            DateTime        @map("data_consulta") @db.Date
+  horario         DateTime        @db.Time(0)
   status          StatusConsulta  @default(pendente)
-  statusPagamento StatusPagamento @default(pendente)
-  formaPagamento  String?
+  statusPagamento StatusPagamento @default(pendente) @map("status_pagamento")
+  formaPagamento  String?         @map("forma_pagamento") @db.VarChar(40)
   valor           Decimal?        @db.Decimal(10, 2)
-  observacoes     String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  observacoes     String?         @db.Text
+  createdAt       DateTime?       @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt       DateTime?       @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
 
-  paciente     Paciente     @relation(fields: [pacienteId], references: [id])
-  profissional Profissional @relation(fields: [profissionalId], references: [id])
+  paciente     Paciente     @relation(fields: [pacienteId], references: [id], onUpdate: Restrict, map: "consulta_ibfk_1")
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onUpdate: Restrict, map: "consulta_ibfk_2")
   historico    Historico[]
+
+  @@index([pacienteId], map: "id_paciente")
+  @@index([profissionalId], map: "id_profissional")
+  @@map("consulta")
 }
 
 model Bloqueio {
-  id             String       @id @default(uuid())
-  profissionalId String
-  dataInicio     DateTime
-  dataFim        DateTime
-  motivo         String?
-  createdAt      DateTime     @default(now())
+  id             Int          @id @default(autoincrement()) @map("id_bloqueio")
+  profissionalId Int          @map("id_profissional")
+  dataInicio     DateTime     @map("data_inicio") @db.DateTime(0)
+  dataFim        DateTime     @map("data_fim") @db.DateTime(0)
+  motivo         String?      @db.VarChar(255)
+  createdAt      DateTime?    @default(now()) @map("created_at") @db.DateTime(0)
 
-  profissional Profissional @relation(fields: [profissionalId], references: [id])
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onUpdate: Restrict, map: "bloqueio_ibfk_1")
+
+  @@index([profissionalId], map: "id_profissional")
+  @@map("bloqueio")
 }
 
 model Historico {
-  id             String   @id @default(uuid())
-  tipo           String   // "cancelamento" | "reagendamento"
-  consultaId     String?
-  pacienteId     String?
-  funcionarioId  String?
-  dataOriginal   DateTime?
-  novaData       DateTime?
-  motivo         String?
-  createdAt      DateTime @default(now())
+  id            Int            @id @default(autoincrement()) @map("id_historico")
+  tipo          historico_tipo
+  consultaId    Int?           @map("id_consulta")
+  pacienteId    Int?           @map("id_paciente")
+  funcionarioId Int?           @map("id_funcionario")
+  dataOriginal  DateTime?      @map("data_original") @db.DateTime(0)
+  novaData      DateTime?      @map("nova_data") @db.DateTime(0)
+  motivo        String?        @db.VarChar(255)
+  createdAt     DateTime?      @default(now()) @map("created_at") @db.DateTime(0)
 
-  consulta   Consulta?   @relation(fields: [consultaId], references: [id])
-  paciente   Paciente?   @relation(fields: [pacienteId], references: [id])
-  funcionario Funcionario? @relation(fields: [funcionarioId], references: [id])
+  consulta    Consulta?    @relation(fields: [consultaId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "historico_ibfk_1")
+  paciente    Paciente?    @relation(fields: [pacienteId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "historico_ibfk_2")
+  funcionario Funcionario? @relation(fields: [funcionarioId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "historico_ibfk_3")
+
+  @@index([consultaId], map: "id_consulta")
+  @@index([funcionarioId], map: "id_funcionario")
+  @@index([pacienteId], map: "id_paciente")
+  @@map("historico")
 }

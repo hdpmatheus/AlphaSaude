@@ -6,10 +6,12 @@ const listar = async (req, res) => {
   const { search } = req.query;
   const where = { ativo: true };
   if (search) {
+    // MySQL: collation utf8mb4_unicode_ci já é case-insensitive por padrão,
+    // então 'contains' simples já cobre o que 'mode: insensitive' fazia no Postgres
     where.OR = [
-      { nome: { contains: search, mode: 'insensitive' } },
+      { nome: { contains: search } },
       { cpf: { contains: search } },
-      { email: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search } },
     ];
   }
   try {
@@ -19,7 +21,8 @@ const listar = async (req, res) => {
       orderBy: { nome: 'asc' },
     });
     res.json(pacientes);
-  } catch {
+  } catch (erro) {
+    console.error('ERRO DETALHADO:', erro);
     res.status(500).json({ error: 'Erro ao listar pacientes' });
   }
 };
@@ -27,7 +30,7 @@ const listar = async (req, res) => {
 const buscarPorId = async (req, res) => {
   try {
     const p = await prisma.paciente.findUnique({
-      where: { id: req.params.id },
+      where: { id: Number(req.params.id) },
       select: { id: true, nome: true, cpf: true, telefone: true, email: true },
     });
     if (!p) return res.status(404).json({ error: 'Paciente não encontrado' });
@@ -58,7 +61,7 @@ const atualizar = async (req, res) => {
   const { nome, telefone, email } = req.body;
   try {
     const p = await prisma.paciente.update({
-      where: { id: req.params.id },
+      where: { id: Number(req.params.id) },
       data: { nome, telefone, email },
       select: { id: true, nome: true, cpf: true, telefone: true, email: true },
     });
