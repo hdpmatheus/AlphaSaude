@@ -9,12 +9,18 @@ router.get('/', authenticate, async (req, res) => {
   if (req.user.tipo !== 'paciente') return res.status(403).json({ error: 'Acesso negado' });
   try {
     const consultas = await prisma.consulta.findMany({
-      where: { pacienteId: req.user.id },
+      where: { pacienteId: Number(req.user.id) },
       include: { profissional: { select: { nome: true, especialidade: true } } },
-      orderBy: [{ data: 'desc' }, { horario: 'asc' }],
+      orderBy: [{ data: 'desc' }],
     });
-    res.json(consultas);
-  } catch {
+    // Formata horario de DateTime para string "HH:MM"
+    const formatado = consultas.map(c => ({
+      ...c,
+      horario: c.horario instanceof Date ? c.horario.toISOString().slice(11, 16) : c.horario,
+    }));
+    res.json(formatado);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Erro ao buscar consultas' });
   }
 });
@@ -29,31 +35,34 @@ router.post('/', authenticate, async (req, res) => {
   }
 
   try {
-    const [ano, mes, dia] = data.split('-').map(Number);
-    const dataObj = new Date(ano, mes - 1, dia, 0, 0, 0);
-    const dataFim = new Date(ano, mes - 1, dia, 23, 59, 59);
+    const horarioDate = new Date(`1970-01-01T${horario}:00`);
 
     const conflito = await prisma.consulta.findFirst({
       where: {
-        profissionalId,
-        horario,
-        data: { gte: dataObj, lte: dataFim },
+        profissionalId: Number(profissionalId),
+        horario: horarioDate,
+        data: new Date(data),
         status: { in: ['confirmada', 'pendente'] },
       },
     });
     if (conflito) return res.status(409).json({ error: 'Horário já ocupado para este profissional' });
 
-    const consulta = await prisma.consulta.create({
-      data: {
-        pacienteId: req.user.id,
-        profissionalId,
-        data: new Date(ano, mes - 1, dia, 12, 0, 0),
-        horario,
-        observacoes: observacoes || null,
-        formaPagamento: formaPagamento || null,
+    // Usa a stored procedure sp_agendar_consulta (com transação)
+    await prisma.$executeRaw`
+      CALL sp_agendar_consulta(${Number(req.user.id)}, ${Number(profissionalId)}, ${data}, ${horario}, ${null}, ${formaPagamento || null}, ${observacoes || null})
+    `;
+
+    const consulta = await prisma.consulta.findFirst({
+      where: {
+        pacienteId: Number(req.user.id),
+        profissionalId: Number(profissionalId),
+        horario: horarioDate,
+        data: new Date(data),
       },
+      orderBy: { id: 'desc' },
       include: { profissional: { select: { nome: true, especialidade: true } } },
     });
+
     res.status(201).json(consulta);
   } catch (err) {
     console.error(err);
@@ -61,30 +70,24 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// Cancelar consulta (paciente logado)
+// Cancelar consulta (paciente logado) — usa sp_cancelar_consulta (com transação)
 router.put('/:id/cancelar', authenticate, async (req, res) => {
   if (req.user.tipo !== 'paciente') return res.status(403).json({ error: 'Acesso negado' });
   const { motivo } = req.body;
-  try {
-    const consulta = await prisma.consulta.findUnique({ where: { id: req.params.id } });
-    if (!consulta) return res.status(404).json({ error: 'Consulta não encontrada' });
-    if (consulta.pacienteId !== req.user.id) return res.status(403).json({ error: 'Acesso negado' });
+  const idConsulta = Number(req.params.id);
 
-    await prisma.consulta.update({
-      where: { id: req.params.id },
-      data: { status: 'cancelada' },
-    });
-    await prisma.historico.create({
-      data: {
-        tipo: 'cancelamento',
-        consultaId: consulta.id,
-        pacienteId: req.user.id,
-        dataOriginal: consulta.data,
-        motivo: motivo || null,
-      },
-    });
+  try {
+    const consulta = await prisma.consulta.findUnique({ where: { id: idConsulta } });
+    if (!consulta) return res.status(404).json({ error: 'Consulta não encontrada' });
+    if (consulta.pacienteId !== Number(req.user.id)) return res.status(403).json({ error: 'Acesso negado' });
+
+    await prisma.$executeRaw`
+      CALL sp_cancelar_consulta(${idConsulta}, ${null}, ${motivo || null})
+    `;
+
     res.json({ message: 'Consulta cancelada' });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Erro ao cancelar' });
   }
 });
